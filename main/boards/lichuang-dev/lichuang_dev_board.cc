@@ -84,23 +84,28 @@ private:
     
     // 定时任务相关
     esp_timer_handle_t task_timer_;
-    const std::array<std::string, 7> task_descriptions_ = {
-        "舵机旋转 angle:0",
-        "舵机旋转 angle:90",
-        "舵机旋转 angle:180",
+    const std::array<std::string, 4> task_descriptions_ = {
+        "舵机旋转到0度",
+        "舵机旋转到45度",
+        "舵机旋转到90度",
+        "舵机旋转到180度"
     };
     int current_task_index_ = 0;
 
+    // TODO 调试用 定时任务回调函数
     static void TaskTimerCallback(void* arg) {
         LichuangDevBoard* board = static_cast<LichuangDevBoard*>(arg);
         const std::string& task_string = board->task_descriptions_[board->current_task_index_];
-        ESP_LOGI(TAG, "%s", task_string.c_str());
         board->current_task_index_ = (board->current_task_index_ + 1) % board->task_descriptions_.size();
 
         // 模拟对话内容
+        ESP_LOGI(TAG, "模拟对话 %d/%d：%s", board->current_task_index_, board->task_descriptions_.size(), task_string.c_str());
+        Application::GetInstance().WakeWordInvoke("Hi 瓦力");
+        vTaskDelay(pdMS_TO_TICKS(500));
         Application::GetInstance().WakeWordInvoke(task_string);
     }
-
+    
+    // TODO 调试用 定时任务回调函数
     void InitializeTaskTimer() {
         esp_timer_create_args_t timer_args = {
             .callback = TaskTimerCallback,
@@ -108,7 +113,7 @@ private:
             .name = "task_timer"
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &task_timer_));
-        ESP_ERROR_CHECK(esp_timer_start_periodic(task_timer_, 10000000)); // 10秒 = 10,000,000微秒
+        ESP_ERROR_CHECK(esp_timer_start_periodic(task_timer_, 15000000)); // 10秒 = 10,000,000微秒
     }
 
     void InitializeI2c() {
@@ -287,7 +292,7 @@ public:
         InitializeTouch();
         InitializeButtons();
         InitializeCamera();
-        InitializeTaskTimer(); // 定时任务
+        InitializeTaskTimer(); // TODO 调试用 定时任务
 
 #if CONFIG_IOT_PROTOCOL_XIAOZHI
         auto& thing_manager = iot::ThingManager::GetInstance();
