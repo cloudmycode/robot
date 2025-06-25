@@ -1,27 +1,28 @@
-#include "wifi_board.h"
-#include "audio_codecs/box_audio_codec.h"
-#include "display/lcd_display.h"
-#include "application.h"
-#include "button.h"
-#include "config.h"
-#include "i2c_device.h"
-#include "iot/thing_manager.h"
-#include "esp32_camera.h"
-#include "pca9685.h"
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <esp_log.h>
-#include <esp_lcd_panel_vendor.h>
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
-#include <wifi_station.h>
+#include <esp_lcd_panel_vendor.h>
 #include <esp_lcd_touch_ft5x06.h>
+#include <esp_log.h>
 #include <esp_lvgl_port.h>
-#include <lvgl.h>
 #include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <lvgl.h>
+#include <wifi_station.h>
+
 #include <array>
 
+#include "application.h"
+#include "audio_codecs/box_audio_codec.h"
 #include "bot_controller.h"
+#include "button.h"
+#include "config.h"
+#include "display/lcd_display.h"
+#include "esp32_camera.h"
+#include "i2c_device.h"
+#include "iot/thing_manager.h"
+#include "pca9685.h"
+#include "wifi_board.h"
 
 #define TAG "LichuangDevBoard"
 
@@ -29,8 +30,9 @@ LV_FONT_DECLARE(font_puhui_20_4);
 LV_FONT_DECLARE(font_awesome_20_4);
 
 class Pca9557 : public I2cDevice {
-public:
-    Pca9557(i2c_master_bus_handle_t i2c_bus, uint8_t addr) : I2cDevice(i2c_bus, addr) {
+   public:
+    Pca9557(i2c_master_bus_handle_t i2c_bus, uint8_t addr)
+        : I2cDevice(i2c_bus, addr) {
         WriteReg(0x01, 0x03);
         WriteReg(0x03, 0xf8);
     }
@@ -43,25 +45,18 @@ public:
 };
 
 class CustomAudioCodec : public BoxAudioCodec {
-private:
+   private:
     Pca9557* pca9557_;
 
-public:
-    CustomAudioCodec(i2c_master_bus_handle_t i2c_bus, Pca9557* pca9557) 
-        : BoxAudioCodec(i2c_bus, 
-                       AUDIO_INPUT_SAMPLE_RATE, 
-                       AUDIO_OUTPUT_SAMPLE_RATE,
-                       AUDIO_I2S_GPIO_MCLK, 
-                       AUDIO_I2S_GPIO_BCLK, 
-                       AUDIO_I2S_GPIO_WS, 
-                       AUDIO_I2S_GPIO_DOUT, 
-                       AUDIO_I2S_GPIO_DIN,
-                       GPIO_NUM_NC, 
-                       AUDIO_CODEC_ES8311_ADDR, 
-                       AUDIO_CODEC_ES7210_ADDR, 
-                       AUDIO_INPUT_REFERENCE),
-          pca9557_(pca9557) {
-    }
+   public:
+    CustomAudioCodec(i2c_master_bus_handle_t i2c_bus, Pca9557* pca9557)
+        : BoxAudioCodec(i2c_bus, AUDIO_INPUT_SAMPLE_RATE,
+                        AUDIO_OUTPUT_SAMPLE_RATE, AUDIO_I2S_GPIO_MCLK,
+                        AUDIO_I2S_GPIO_BCLK, AUDIO_I2S_GPIO_WS,
+                        AUDIO_I2S_GPIO_DOUT, AUDIO_I2S_GPIO_DIN, GPIO_NUM_NC,
+                        AUDIO_CODEC_ES8311_ADDR, AUDIO_CODEC_ES7210_ADDR,
+                        AUDIO_INPUT_REFERENCE),
+          pca9557_(pca9557) {}
 
     virtual void EnableOutput(bool enable) override {
         BoxAudioCodec::EnableOutput(enable);
@@ -74,44 +69,44 @@ public:
 };
 
 class LichuangDevBoard : public WifiBoard {
-private:
+   private:
     i2c_master_bus_handle_t i2c_bus_;
     i2c_master_dev_handle_t pca9557_handle_;
     Button boot_button_;
     LcdDisplay* display_;
     Pca9557* pca9557_;
     Esp32Camera* camera_;
-    
+
     // 定时任务相关
     esp_timer_handle_t task_timer_;
-    const std::array<std::string, 4> task_descriptions_ = {
-        "舵机旋转到0度",
-        "舵机旋转到45度",
-        "舵机旋转到90度",
-        "舵机旋转到180度"
-    };
     int current_task_index_ = 0;
 
     // TODO 调试用 定时任务回调函数
     static void TaskTimerCallback(void* arg) {
         LichuangDevBoard* board = static_cast<LichuangDevBoard*>(arg);
-        const std::string& task_string = board->task_descriptions_[board->current_task_index_];
-        board->current_task_index_ = (board->current_task_index_ + 1) % board->task_descriptions_.size();
+        int angle = board->current_task_index_ * 30;
 
-        // 模拟对话内容
-        ESP_LOGI(TAG, "模拟对话 %d/%d：%s", board->current_task_index_, board->task_descriptions_.size(), task_string.c_str());
-        Application::GetInstance().WakeWordInvoke(task_string);
+        Pca9685* pca9685 = Pca9685::GetInstance();
+        // 使用结构体方式，让两个舵机同时运动（自动计算大小）
+        ServoControl servos[] = {
+            {0, angle},  // 通道0
+            {1, angle / 2}   // 通道1
+        };
+
+        ESP_LOGI(TAG, "同时设置通道0和1舵机角度: %d°", angle);
+        pca9685->SetServoAngles(servos);  // 自动计算大小为2
+        // pca9685->SetServoAngle(0, angle);
+
+        board->current_task_index_ = (board->current_task_index_ + 1) % 7;
     }
-    
+
     // TODO 调试用 定时任务回调函数
     void InitializeTaskTimer() {
         esp_timer_create_args_t timer_args = {
-            .callback = TaskTimerCallback,
-            .arg = this,
-            .name = "task_timer"
-        };
+            .callback = TaskTimerCallback, .arg = this, .name = "task_timer"};
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &task_timer_));
-        ESP_ERROR_CHECK(esp_timer_start_periodic(task_timer_, 15000000)); // 10秒 = 10,000,000微秒
+        ESP_ERROR_CHECK(esp_timer_start_periodic(
+            task_timer_, 5000000));  // 10秒 = 10,000,000微秒
     }
 
     void InitializeI2c() {
@@ -124,16 +119,17 @@ private:
             .glitch_ignore_cnt = 7,
             .intr_priority = 0,
             .trans_queue_depth = 0,
-            .flags = {
-                .enable_internal_pullup = 1,
-            },
+            .flags =
+                {
+                    .enable_internal_pullup = 1,
+                },
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
 
         // Initialize PCA9557
         pca9557_ = new Pca9557(i2c_bus_, 0x19);
-        
-        vTaskDelay(pdMS_TO_TICKS(100)); // 等待
+
+        vTaskDelay(pdMS_TO_TICKS(100));  // 等待
 
         // Initialize PCA9685 (舵机控制器) - 使用单例模式
         Pca9685::Initialize(i2c_bus_, 0x40);
@@ -146,14 +142,17 @@ private:
         buscfg.sclk_io_num = GPIO_NUM_41;
         buscfg.quadwp_io_num = GPIO_NUM_NC;
         buscfg.quadhd_io_num = GPIO_NUM_NC;
-        buscfg.max_transfer_sz = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t);
-        ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
+        buscfg.max_transfer_sz =
+            DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t);
+        ESP_ERROR_CHECK(
+            spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
 
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
+            if (app.GetDeviceState() == kDeviceStateStarting &&
+                !WifiStation::GetInstance().IsConnected()) {
                 ResetWifiConfiguration();
             }
             app.ToggleChatState();
@@ -163,7 +162,8 @@ private:
         boot_button_.OnDoubleClick([this]() {
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateIdle) {
-                app.SetAecMode(app.GetAecMode() == kAecOff ? kAecOnDeviceSide : kAecOff);
+                app.SetAecMode(app.GetAecMode() == kAecOff ? kAecOnDeviceSide
+                                                           : kAecOff);
             }
         });
 #endif
@@ -182,7 +182,8 @@ private:
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
-        ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io));
+        ESP_ERROR_CHECK(
+            esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io));
 
         // 初始化液晶屏驱动芯片ST7789
         ESP_LOGD(TAG, "Install LCD driver");
@@ -190,8 +191,9 @@ private:
         panel_config.reset_gpio_num = GPIO_NUM_NC;
         panel_config.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB;
         panel_config.bits_per_pixel = 16;
-        ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(panel_io, &panel_config, &panel));
-        
+        ESP_ERROR_CHECK(
+            esp_lcd_new_panel_st7789(panel_io, &panel_config, &panel));
+
         esp_lcd_panel_reset(panel);
         pca9557_->SetOutputState(0, 0);
 
@@ -199,39 +201,43 @@ private:
         esp_lcd_panel_invert_color(panel, true);
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
-        display_ = new SpiLcdDisplay(panel_io, panel,
-                                    DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY,
-                                    {
-                                        .text_font = &font_puhui_20_4,
-                                        .icon_font = &font_awesome_20_4,
+        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH,
+                                     DISPLAY_HEIGHT, DISPLAY_OFFSET_X,
+                                     DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                     DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY,
+                                     {
+                                         .text_font = &font_puhui_20_4,
+                                         .icon_font = &font_awesome_20_4,
 #if CONFIG_USE_WECHAT_MESSAGE_STYLE
-                                        .emoji_font = font_emoji_32_init(),
+                                         .emoji_font = font_emoji_32_init(),
 #else
-                                        .emoji_font = font_emoji_64_init(),
+                                         .emoji_font = font_emoji_64_init(),
 #endif
-                                    });
+                                     });
     }
 
-    void InitializeTouch()
-    {
+    void InitializeTouch() {
         esp_lcd_touch_handle_t tp;
         esp_lcd_touch_config_t tp_cfg = {
             .x_max = DISPLAY_WIDTH,
             .y_max = DISPLAY_HEIGHT,
-            .rst_gpio_num = GPIO_NUM_NC, // Shared with LCD reset
-            .int_gpio_num = GPIO_NUM_NC, 
-            .levels = {
-                .reset = 0,
-                .interrupt = 0,
-            },
-            .flags = {
-                .swap_xy = 1,
-                .mirror_x = 1,
-                .mirror_y = 0,
-            },
+            .rst_gpio_num = GPIO_NUM_NC,  // Shared with LCD reset
+            .int_gpio_num = GPIO_NUM_NC,
+            .levels =
+                {
+                    .reset = 0,
+                    .interrupt = 0,
+                },
+            .flags =
+                {
+                    .swap_xy = 1,
+                    .mirror_x = 1,
+                    .mirror_y = 0,
+                },
         };
         esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-        esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
+        esp_lcd_panel_io_i2c_config_t tp_io_config =
+            ESP_LCD_TOUCH_IO_I2C_FT5x06_CONFIG();
         tp_io_config.scl_speed_hz = 400000;
 
         esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle);
@@ -240,7 +246,7 @@ private:
 
         /* Add touch input (for selected screen) */
         const lvgl_port_touch_cfg_t touch_cfg = {
-            .disp = lv_display_get_default(), 
+            .disp = lv_display_get_default(),
             .handle = tp,
         };
 
@@ -252,8 +258,10 @@ private:
         pca9557_->SetOutputState(2, 0);
 
         camera_config_t config = {};
-        config.ledc_channel = LEDC_CHANNEL_2;  // LEDC通道选择  用于生成XCLK时钟 但是S3不用
-        config.ledc_timer = LEDC_TIMER_2; // LEDC timer选择  用于生成XCLK时钟 但是S3不用
+        config.ledc_channel =
+            LEDC_CHANNEL_2;  // LEDC通道选择  用于生成XCLK时钟 但是S3不用
+        config.ledc_timer =
+            LEDC_TIMER_2;  // LEDC timer选择  用于生成XCLK时钟 但是S3不用
         config.pin_d0 = CAMERA_PIN_D0;
         config.pin_d1 = CAMERA_PIN_D1;
         config.pin_d2 = CAMERA_PIN_D2;
@@ -266,7 +274,7 @@ private:
         config.pin_pclk = CAMERA_PIN_PCLK;
         config.pin_vsync = CAMERA_PIN_VSYNC;
         config.pin_href = CAMERA_PIN_HREF;
-        config.pin_sccb_sda = -1;   // 这里写-1 表示使用已经初始化的I2C接口
+        config.pin_sccb_sda = -1;  // 这里写-1 表示使用已经初始化的I2C接口
         config.pin_sccb_scl = CAMERA_PIN_SIOC;
         config.sccb_i2c_port = 1;
         config.pin_pwdn = CAMERA_PIN_PWDN;
@@ -282,7 +290,7 @@ private:
         camera_ = new Esp32Camera(config);
     }
 
-public:
+   public:
     LichuangDevBoard() : boot_button_(BOOT_BUTTON_GPIO) {
         InitializeI2c();
         InitializeSpi();
@@ -290,7 +298,7 @@ public:
         InitializeTouch();
         InitializeButtons();
         InitializeCamera();
-        InitializeTaskTimer(); // TODO 调试用 定时任务
+        InitializeTaskTimer();  // TODO 调试用 定时任务
 
 #if CONFIG_IOT_PROTOCOL_XIAOZHI
         auto& thing_manager = iot::ThingManager::GetInstance();
@@ -298,32 +306,27 @@ public:
         thing_manager.AddThing(iot::CreateThing("Screen"));
 #endif
         GetBacklight()->RestoreBrightness();
-        GetAudioCodec()->SetOutputVolume(1); // 设置输出音量
-        
+        GetAudioCodec()->SetOutputVolume(1);  // 设置输出音量
+
         // 初始化BotController
         ESP_LOGI(TAG, "BotController初始化");
         BotController::GetInstance();
     }
 
     virtual AudioCodec* GetAudioCodec() override {
-        static CustomAudioCodec audio_codec(
-            i2c_bus_, 
-            pca9557_);
+        static CustomAudioCodec audio_codec(i2c_bus_, pca9557_);
         return &audio_codec;
     }
 
-    virtual Display* GetDisplay() override {
-        return display_;
-    }
-    
+    virtual Display* GetDisplay() override { return display_; }
+
     virtual Backlight* GetBacklight() override {
-        static PwmBacklight backlight(DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT);
+        static PwmBacklight backlight(DISPLAY_BACKLIGHT_PIN,
+                                      DISPLAY_BACKLIGHT_OUTPUT_INVERT);
         return &backlight;
     }
 
-    virtual Camera* GetCamera() override {
-        return camera_;
-    }
+    virtual Camera* GetCamera() override { return camera_; }
 };
 
 DECLARE_BOARD(LichuangDevBoard);

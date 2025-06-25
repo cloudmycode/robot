@@ -132,24 +132,6 @@ class Pca9685 : public I2cDevice {
      */
     void SetPWM(uint8_t channel, uint16_t on, uint16_t off);
 
-    /**
-     * @brief 检查设备是否就绪
-     *
-     * @return bool 设备就绪返回true，否则返回false
-     *
-     * 功能：
-     * - 通过I2C通信检查PCA9685是否响应
-     * - 用于设备连接状态检测
-     *
-     * 用法：
-     * if (pca->IsDeviceReady()) {
-     *     // 设备正常，可以操作
-     * } else {
-     *     // 设备未连接或故障
-     * }
-     */
-    bool IsDeviceReady();
-
    private:
     // 私有构造函数
     Pca9685(i2c_master_bus_handle_t i2c_bus, uint8_t addr);
@@ -189,8 +171,8 @@ class Pca9685 : public I2cDevice {
 
     // 内部方法
     void Initialize();
-    void SetMultiplePWM(const uint8_t *channels, const uint16_t *off_values,
-                        size_t count);
+    void SetMultiplePWM(const uint8_t *channels, const uint16_t *off_values, size_t count);
+    bool IsDeviceReady();
 };
 
 #endif  // PCA9685_H

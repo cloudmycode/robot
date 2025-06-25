@@ -95,6 +95,12 @@ void Pca9685::SetServoAngle(uint8_t channel, int angle) {
         return;
     }
 
+    // 检查设备是否正常
+    if (!this->IsDeviceReady()) {
+        ESP_LOGE(TAG, "PCA9685设备状态异常，无法控制舵机");
+        return;
+    }
+
     if (angle < SERVO_MIN_ANGLE || angle > SERVO_MAX_ANGLE) {
         ESP_LOGW(TAG, "角度超出范围 (%d-%d): %d", SERVO_MIN_ANGLE,
                  SERVO_MAX_ANGLE, angle);
@@ -126,7 +132,13 @@ void Pca9685::SetServoAngles(const ServoControl* servos, size_t count) {
         return;
     }
 
-    ESP_LOGI(TAG, "开始批量设置 %zu 个舵机角度", count);
+    // 检查设备是否正常
+    if (!this->IsDeviceReady()) {
+        ESP_LOGE(TAG, "PCA9685设备状态异常，无法控制舵机");
+        return;
+    }
+
+    ESP_LOGI(TAG, "PCA9685设备准备就绪，开始批量设置 %zu 个舵机角度", count);
 
     // 准备所有通道的PWM数据
     std::vector<uint16_t> pwm_values;
