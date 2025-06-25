@@ -7,7 +7,9 @@
 #include "i2c_device.h"
 #include "iot/thing_manager.h"
 #include "esp32_camera.h"
-
+#include "pca9685.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
 #include <driver/i2c_master.h>
@@ -16,7 +18,10 @@
 #include <esp_lcd_touch_ft5x06.h>
 #include <esp_lvgl_port.h>
 #include <lvgl.h>
+#include <esp_timer.h>
+#include <array>
 
+#include "bot_controller.h"
 
 #define TAG "LichuangDevBoard"
 
@@ -76,6 +81,35 @@ private:
     LcdDisplay* display_;
     Pca9557* pca9557_;
     Esp32Camera* camera_;
+    
+    // 定时任务相关
+    esp_timer_handle_t task_timer_;
+    const std::array<std::string, 7> task_descriptions_ = {
+        "舵机旋转 angle:0",
+        "舵机旋转 angle:90",
+        "舵机旋转 angle:180",
+    };
+    int current_task_index_ = 0;
+
+    static void TaskTimerCallback(void* arg) {
+        LichuangDevBoard* board = static_cast<LichuangDevBoard*>(arg);
+        const std::string& task_string = board->task_descriptions_[board->current_task_index_];
+        ESP_LOGI(TAG, "%s", task_string.c_str());
+        board->current_task_index_ = (board->current_task_index_ + 1) % board->task_descriptions_.size();
+
+        // 模拟对话内容
+        Application::GetInstance().WakeWordInvoke(task_string);
+    }
+
+    void InitializeTaskTimer() {
+        esp_timer_create_args_t timer_args = {
+            .callback = TaskTimerCallback,
+            .arg = this,
+            .name = "task_timer"
+        };
+        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &task_timer_));
+        ESP_ERROR_CHECK(esp_timer_start_periodic(task_timer_, 10000000)); // 10秒 = 10,000,000微秒
+    }
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -95,6 +129,11 @@ private:
 
         // Initialize PCA9557
         pca9557_ = new Pca9557(i2c_bus_, 0x19);
+        
+        vTaskDelay(pdMS_TO_TICKS(100)); // 等待
+
+        // Initialize PCA9685 (舵机控制器) - 使用单例模式
+        Pca9685::Initialize(i2c_bus_, 0x40);
     }
 
     void InitializeSpi() {
@@ -248,6 +287,7 @@ public:
         InitializeTouch();
         InitializeButtons();
         InitializeCamera();
+        InitializeTaskTimer(); // 定时任务
 
 #if CONFIG_IOT_PROTOCOL_XIAOZHI
         auto& thing_manager = iot::ThingManager::GetInstance();
@@ -255,6 +295,11 @@ public:
         thing_manager.AddThing(iot::CreateThing("Screen"));
 #endif
         GetBacklight()->RestoreBrightness();
+        GetAudioCodec()->SetOutputVolume(1); // 设置输出音量
+        
+        // 初始化BotController
+        ESP_LOGI(TAG, "BotController初始化");
+        BotController::GetInstance();
     }
 
     virtual AudioCodec* GetAudioCodec() override {
