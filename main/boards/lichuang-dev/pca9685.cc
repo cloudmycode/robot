@@ -5,11 +5,12 @@
 #include <freertos/task.h>
 
 #include <cmath>
+#include <vector>
 
 #define TAG "PCA9685"
 
 // 初始化静态成员变量
-Pca9685 *Pca9685::instance_ = nullptr;
+Pca9685* Pca9685::instance_ = nullptr;
 
 Pca9685::Pca9685(i2c_master_bus_handle_t i2c_bus, uint8_t addr)
     : I2cDevice(i2c_bus, addr), pwm_frequency_(DEFAULT_PWM_FREQ) {
@@ -27,7 +28,7 @@ Pca9685::Pca9685(i2c_master_bus_handle_t i2c_bus, uint8_t addr)
     Initialize();
 }
 
-Pca9685 *Pca9685::GetInstance() {
+Pca9685* Pca9685::GetInstance() {
     if (instance_ == nullptr) {
         ESP_LOGE(TAG, "PCA9685实例未初始化，请先调用Initialize()");
         return nullptr;
@@ -106,9 +107,113 @@ void Pca9685::SetServoAngle(uint8_t channel, int angle) {
         ((angle - SERVO_MIN_ANGLE) * (SERVO_MAX_PULSE - SERVO_MIN_PULSE)) /
             (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE);
 
-    SetServoPulse(channel, pulse_us);
+    // 将脉冲宽度转换为PWM值并直接设置
+    float pwm_period_us = 1000000.0f / pwm_frequency_;
+    uint16_t pwm_units =
+        static_cast<uint16_t>((pulse_us * 4096.0f) / pwm_period_us);
+
+    ESP_LOGD(TAG, "通道%d: 角度=%d°, 脉冲宽度=%dus, PWM周期=%fus, PWM单位=%d",
+             channel, angle, pulse_us, pwm_period_us, pwm_units);
+
+    SetPWM(channel, 0, pwm_units);
     ESP_LOGI(TAG, "通道 %d 舵机角度设置为 %d° (脉冲宽度: %d us)", channel,
              angle, pulse_us);
+}
+
+void Pca9685::SetServoAngles(const ServoControl* servos, size_t count) {
+    if (count == 0) {
+        ESP_LOGW(TAG, "舵机数量为0，跳过设置");
+        return;
+    }
+
+    ESP_LOGI(TAG, "开始批量设置 %zu 个舵机角度", count);
+
+    // 准备所有通道的PWM数据
+    std::vector<uint16_t> pwm_values;
+    std::vector<uint8_t> channel_array;
+    pwm_values.reserve(count);
+    channel_array.reserve(count);
+
+    for (size_t i = 0; i < count; i++) {
+        uint8_t channel = servos[i].channel;
+        int angle = servos[i].angle;
+
+        if (channel > 15) {
+            ESP_LOGE(TAG, "通道号超出范围 (0-15): %d", channel);
+            continue;
+        }
+
+        if (angle < SERVO_MIN_ANGLE || angle > SERVO_MAX_ANGLE) {
+            ESP_LOGW(TAG, "角度超出范围 (%d-%d): %d", SERVO_MIN_ANGLE,
+                     SERVO_MAX_ANGLE, angle);
+            angle =
+                (angle < SERVO_MIN_ANGLE) ? SERVO_MIN_ANGLE : SERVO_MAX_ANGLE;
+        }
+
+        // 将角度转换为脉冲宽度
+        uint16_t pulse_us =
+            SERVO_MIN_PULSE +
+            ((angle - SERVO_MIN_ANGLE) * (SERVO_MAX_PULSE - SERVO_MIN_PULSE)) /
+                (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE);
+
+        // 将脉冲宽度转换为PWM值
+        float pwm_period_us = 1000000.0f / pwm_frequency_;
+        uint16_t pwm_units =
+            static_cast<uint16_t>((pulse_us * 4096.0f) / pwm_period_us);
+
+        channel_array.push_back(channel);
+        pwm_values.push_back(pwm_units);
+
+        ESP_LOGI(TAG, "舵机 %zu: 通道 %d, 角度=%d°, 脉冲=%dus, PWM=%d", i,
+                 channel, angle, pulse_us, pwm_units);
+    }
+
+    // 使用AUTO_INCREMENT功能批量设置PWM
+    if (!pwm_values.empty()) {
+        SetMultiplePWM(channel_array.data(), pwm_values.data(),
+                       pwm_values.size());
+        ESP_LOGI(TAG, "批量设置完成，所有舵机将同时运动");
+    }
+}
+
+void Pca9685::SetMultiplePWM(const uint8_t* channels,
+                             const uint16_t* off_values, size_t count) {
+    if (count == 0) return;
+
+    // 找到最小和最大的通道号
+    uint8_t min_channel = channels[0];
+    uint8_t max_channel = channels[0];
+    for (size_t i = 1; i < count; i++) {
+        if (channels[i] < min_channel) min_channel = channels[i];
+        if (channels[i] > max_channel) max_channel = channels[i];
+    }
+
+    // 计算需要写入的寄存器范围
+    uint8_t start_reg = LED0_ON_L + (min_channel * 4);
+    uint8_t end_reg = LED0_ON_L + (max_channel * 4) + 3;
+    size_t reg_count = end_reg - start_reg + 1;
+
+    // 准备寄存器数据（初始化为0）
+    std::vector<uint8_t> reg_data(reg_count, 0);
+
+    // 填充每个通道的PWM数据
+    for (size_t i = 0; i < count; i++) {
+        uint8_t channel = channels[i];
+        uint16_t off_value = off_values[i];
+
+        // 计算该通道在寄存器数组中的位置
+        size_t reg_offset = (channel - min_channel) * 4;
+
+        // 设置OFF值（ON值保持为0）
+        reg_data[reg_offset + 2] = off_value & 0xFF;         // OFF_L
+        reg_data[reg_offset + 3] = (off_value >> 8) & 0xFF;  // OFF_H
+    }
+
+    // 使用AUTO_INCREMENT功能批量写入
+    WriteRegs(start_reg, reg_data.data(), reg_count);
+
+    ESP_LOGI(TAG, "批量PWM设置完成: 通道%d-%d, 寄存器0x%02X-0x%02X",
+             min_channel, max_channel, start_reg, end_reg);
 }
 
 void Pca9685::SetPWM(uint8_t channel, uint16_t on, uint16_t off) {
@@ -158,29 +263,6 @@ void Pca9685::SetPWM(uint8_t channel, uint16_t on, uint16_t off) {
     }
 
     ESP_LOGE(TAG, "通道%d PWM设置失败，已重试%d次", channel, max_retries);
-}
-
-void Pca9685::SetServoPulse(uint8_t channel, uint16_t pulse_us) {
-    if (channel > 15) {
-        ESP_LOGE(TAG, "通道号超出范围 (0-15): %d", channel);
-        return;
-    }
-
-    if (pulse_us < SERVO_MIN_PULSE || pulse_us > SERVO_MAX_PULSE) {
-        ESP_LOGW(TAG, "脉冲宽度超出范围 (%d-%d us): %d", SERVO_MIN_PULSE,
-                 SERVO_MAX_PULSE, pulse_us);
-        pulse_us =
-            (pulse_us < SERVO_MIN_PULSE) ? SERVO_MIN_PULSE : SERVO_MAX_PULSE;
-    }
-
-    float pwm_period_us = 1000000.0f / pwm_frequency_;
-    uint16_t pwm_units =
-        static_cast<uint16_t>((pulse_us * 4096.0f) / pwm_period_us);
-
-    ESP_LOGD(TAG, "通道%d: 脉冲宽度=%dus, PWM周期=%fus, PWM单位=%d", channel,
-             pulse_us, pwm_period_us, pwm_units);
-
-    SetPWM(channel, 0, pwm_units);
 }
 
 bool Pca9685::IsDeviceReady() {

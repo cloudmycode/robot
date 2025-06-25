@@ -100,8 +100,6 @@ private:
 
         // 模拟对话内容
         ESP_LOGI(TAG, "模拟对话 %d/%d：%s", board->current_task_index_, board->task_descriptions_.size(), task_string.c_str());
-        Application::GetInstance().WakeWordInvoke("Hi 瓦力");
-        vTaskDelay(pdMS_TO_TICKS(500));
         Application::GetInstance().WakeWordInvoke(task_string);
     }
     

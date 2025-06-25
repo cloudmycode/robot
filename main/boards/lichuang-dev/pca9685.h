@@ -6,6 +6,16 @@
 #include "i2c_device.h"
 
 /**
+ * @brief 舵机控制结构体
+ */
+struct ServoControl {
+    uint8_t channel;  // 通道号（0-15）
+    int angle;        // 舵机角度（0-180度）
+
+    ServoControl(uint8_t ch, int ang) : channel(ch), angle(ang) {}
+};
+
+/**
  * @brief PCA9685 PWM控制器类
  *
  * PCA9685是一个16通道12位PWM控制器，常用于控制舵机、LED等设备。
@@ -52,7 +62,7 @@ class Pca9685 : public I2cDevice {
      * - 将角度值转换为PWM脉冲宽度
      * - 0度对应500微秒脉冲
      * - 180度对应2500微秒脉冲
-     * - 自动调用SetServoPulse()设置脉冲宽度
+     * - 自动调用SetPWM()设置具体的PWM参数
      *
      * 用法：
      * pca->SetServoAngle(0, 90);  // 设置通道0的舵机到90度位置
@@ -61,21 +71,47 @@ class Pca9685 : public I2cDevice {
     void SetServoAngle(uint8_t channel, int angle);
 
     /**
-     * @brief 设置舵机脉冲宽度
+     * @brief 批量设置多个舵机角度（同时执行）
      *
-     * @param channel 通道号（0-15）
-     * @param pulse_us 脉冲宽度（微秒，通常500-2500）
+     * @param servos 舵机控制结构体数组
+     * @param count 舵机数量
      *
      * 功能：
-     * - 直接设置PWM脉冲宽度
-     * - 将微秒值转换为PCA9685的12位PWM值
-     * - 调用SetPWM()设置具体的PWM参数
+     * - 同时设置多个舵机的角度
+     * - 使用PCA9685的AUTO_INCREMENT功能
+     * - 所有舵机会同时开始运动
      *
      * 用法：
-     * pca->SetServoPulse(0, 1500);  // 设置通道0为1500微秒脉冲（舵机中间位置）
-     * pca->SetServoPulse(1, 2000);  // 设置通道1为2000微秒脉冲
+     * ServoControl servos[] = {
+     *     {0, 90},   // 通道0，90度
+     *     {1, 180}   // 通道1，180度
+     * };
+     * pca->SetServoAngles(servos, 2);  // 同时设置通道0和1
      */
-    void SetServoPulse(uint8_t channel, uint16_t pulse_us);
+    void SetServoAngles(const ServoControl *servos, size_t count);
+
+    /**
+     * @brief 批量设置多个舵机角度（自动计算大小）- 模板版本
+     *
+     * @param servos 舵机控制结构体数组
+     *
+     * 功能：
+     * - 同时设置多个舵机的角度
+     * - 自动计算数组大小，无需手动指定count
+     * - 使用PCA9685的AUTO_INCREMENT功能
+     * - 所有舵机会同时开始运动
+     *
+     * 用法：
+     * ServoControl servos[] = {
+     *     {0, 90},   // 通道0，90度
+     *     {1, 180}   // 通道1，180度
+     * };
+     * pca->SetServoAngles(servos);  // 自动计算大小为2
+     */
+    template <size_t N>
+    void SetServoAngles(const ServoControl (&servos)[N]) {
+        SetServoAngles(servos, N);
+    }
 
     /**
      * @brief 设置PWM输出
@@ -153,6 +189,8 @@ class Pca9685 : public I2cDevice {
 
     // 内部方法
     void Initialize();
+    void SetMultiplePWM(const uint8_t *channels, const uint16_t *off_values,
+                        size_t count);
 };
 
 #endif  // PCA9685_H

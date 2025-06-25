@@ -54,16 +54,18 @@ void BotController::RegisterMcpTools() {
                 }
 
                 try {
-                    // 控制通道0和1的舵机
-                    ESP_LOGI(TAG, "设置通道0舵机角度: %d°", angle);
-                    pca9685->SetServoAngle(0, angle);
-                    vTaskDelay(pdMS_TO_TICKS(200));  // 等待舵机移动
+                    // 使用结构体方式，让两个舵机同时运动（自动计算大小）
+                    ServoControl servos[] = {
+                        {0, angle},  // 通道0
+                        {1, angle}   // 通道1
+                    };
 
-                    ESP_LOGI(TAG, "设置通道1舵机角度: %d°", angle);
-                    pca9685->SetServoAngle(1, angle);
-                    vTaskDelay(pdMS_TO_TICKS(200));  // 等待舵机移动
+                    ESP_LOGI(TAG, "同时设置通道0和1舵机角度: %d°", angle);
+                    pca9685->SetServoAngles(servos);  // 自动计算大小为2
+                    // pca9685->SetServoAngle(0, angle);
 
-                    ESP_LOGI(TAG, "舵机控制成功，通道0和1都设置为 %d°", angle);
+                    ESP_LOGI(TAG, "舵机控制成功，通道0和1同时设置为 %d°",
+                             angle);
                 } catch (const std::exception &e) {
                     ESP_LOGE(TAG, "舵机控制异常: %s", e.what());
                 } catch (...) {
