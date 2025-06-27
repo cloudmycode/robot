@@ -21,6 +21,7 @@
 #include "esp32_camera.h"
 #include "i2c_device.h"
 #include "iot/thing_manager.h"
+#include "l298n_motor_controller.h"
 #include "pca9685.h"
 #include "wifi_board.h"
 
@@ -77,7 +78,8 @@ class LichuangDevBoard : public WifiBoard {
     Pca9557* pca9557_;
     Esp32Camera* camera_;
 
-    // 定时任务相关
+    /** 调试 Start ***************************************************/
+    // TODO 定时任务相关
     esp_timer_handle_t task_timer_;
     int current_task_index_ = 0;
 
@@ -86,6 +88,7 @@ class LichuangDevBoard : public WifiBoard {
         LichuangDevBoard* board = static_cast<LichuangDevBoard*>(arg);
         int angle = board->current_task_index_ * 30;
 
+        // 测试舵机控制
         Pca9685* pca9685 = Pca9685::GetInstance();
         // 使用结构体方式，让两个舵机同时运动（自动计算大小）
         ServoControl servos[] = {
@@ -97,6 +100,11 @@ class LichuangDevBoard : public WifiBoard {
         pca9685->SetServoAngles(servos);  // 自动计算大小为2
         // pca9685->SetServoAngle(0, angle);
 
+        // 测试电机控制
+        L298nMotorController* motor_controller = L298nMotorController::GetInstance();
+        motor_controller->SetMotorB(MotorDirection::FORWARD, 5 * board->current_task_index_);
+
+        // 更新当前任务索引
         board->current_task_index_ = (board->current_task_index_ + 1) % 7;
     }
 
@@ -108,6 +116,7 @@ class LichuangDevBoard : public WifiBoard {
         ESP_ERROR_CHECK(esp_timer_start_periodic(
             task_timer_, 5000000));  // 10秒 = 10,000,000微秒
     }
+    /** 调试 End ***************************************************/
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -129,10 +138,15 @@ class LichuangDevBoard : public WifiBoard {
         // Initialize PCA9557
         pca9557_ = new Pca9557(i2c_bus_, 0x19);
 
-        vTaskDelay(pdMS_TO_TICKS(100));  // 等待
-
         // Initialize PCA9685 (舵机控制器) - 使用单例模式
+        vTaskDelay(pdMS_TO_TICKS(100));
+        ESP_LOGI(TAG, "初始化PCA9685");
         Pca9685::Initialize(i2c_bus_, 0x40);
+        
+        // Initialize L298N电机控制器 - 使用单例模式
+        vTaskDelay(pdMS_TO_TICKS(100));
+        ESP_LOGI(TAG, "初始化L298N电机控制器");
+        L298nMotorController::Initialize();
     }
 
     void InitializeSpi() {
@@ -311,6 +325,14 @@ class LichuangDevBoard : public WifiBoard {
         // 初始化BotController
         ESP_LOGI(TAG, "BotController初始化");
         BotController::GetInstance();
+        
+        // 验证L298N电机控制器初始化
+        L298nMotorController* motor_controller = L298nMotorController::GetInstance();
+        if (motor_controller != nullptr) {
+            ESP_LOGI(TAG, "L298N电机控制器初始化成功");
+        } else {
+            ESP_LOGE(TAG, "L298N电机控制器初始化失败");
+        }
     }
 
     virtual AudioCodec* GetAudioCodec() override {
