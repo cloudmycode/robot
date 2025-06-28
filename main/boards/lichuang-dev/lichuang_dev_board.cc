@@ -86,7 +86,11 @@ class LichuangDevBoard : public WifiBoard {
     // TODO 调试用 定时任务回调函数
     static void TaskTimerCallback(void* arg) {
         LichuangDevBoard* board = static_cast<LichuangDevBoard*>(arg);
-        int angle = board->current_task_index_ * 30;
+        int idx = board->current_task_index_;
+        // 更新当前任务索引
+        board->current_task_index_ = (board->current_task_index_ + 1) % 7;
+
+        int angle = idx % 2 == 0 ? 180 : 0;
 
         // 测试舵机控制
         Pca9685* pca9685 = Pca9685::GetInstance();
@@ -102,10 +106,8 @@ class LichuangDevBoard : public WifiBoard {
 
         // 测试电机控制
         L298nMotorController* motor_controller = L298nMotorController::GetInstance();
-        motor_controller->SetMotorB(MotorDirection::FORWARD, 5 * board->current_task_index_);
-
-        // 更新当前任务索引
-        board->current_task_index_ = (board->current_task_index_ + 1) % 7;
+        // motor_controller->SetMotorB(idx % 2 == 0 ? MotorDirection::FORWARD : MotorDirection::BACKWARD, 15 * idx);
+        motor_controller->SetMotorB(MotorDirection::FORWARD, 16);
     }
 
     // TODO 调试用 定时任务回调函数
@@ -114,7 +116,7 @@ class LichuangDevBoard : public WifiBoard {
             .callback = TaskTimerCallback, .arg = this, .name = "task_timer"};
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &task_timer_));
         ESP_ERROR_CHECK(esp_timer_start_periodic(
-            task_timer_, 5000000));  // 10秒 = 10,000,000微秒
+            task_timer_, 10000000));  // 1秒 = 1,000,000微秒
     }
     /** 调试 End ***************************************************/
 

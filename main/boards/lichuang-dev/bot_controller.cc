@@ -199,5 +199,132 @@ void BotController::RegisterMcpTools() {
             return status_json;
         });
 
+    // 设置平滑过渡配置
+    mcp_server.AddTool(
+        "self.electron.set_smooth_transition_config", "设置平滑过渡配置，ramp_time_ms: 过渡时间(毫秒), step_interval_ms: 步进间隔(毫秒), min_speed: 最小速度(0-100), enable: 是否启用",
+        PropertyList({
+            Property("ramp_time_ms", kPropertyTypeInteger, 500, 100, 2000),
+            Property("step_interval_ms", kPropertyTypeInteger, 20, 10, 100),
+            Property("min_speed", kPropertyTypeInteger, 5, 0, 20),
+            Property("enable", kPropertyTypeBoolean, true)
+        }),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int ramp_time_ms = properties["ramp_time_ms"].value<int>();
+            int step_interval_ms = properties["step_interval_ms"].value<int>();
+            int min_speed = properties["min_speed"].value<int>();
+            bool enable = properties["enable"].value<bool>();
+            
+            ESP_LOGI(TAG, "设置平滑过渡配置: 过渡时间=%dms, 步进间隔=%dms, 最小速度=%d, 启用=%s",
+                     ramp_time_ms, step_interval_ms, min_speed, enable ? "是" : "否");
+
+            // 获取L298N电机控制器实例
+            L298nMotorController* motor_controller = L298nMotorController::GetInstance();
+            if (motor_controller == nullptr) {
+                ESP_LOGE(TAG, "L298N电机控制器未初始化");
+                return false;
+            }
+
+            // 创建配置结构体
+            SmoothTransitionConfig config;
+            config.ramp_time_ms = ramp_time_ms;
+            config.step_interval_ms = step_interval_ms;
+            config.min_speed = min_speed;
+            config.enable_smooth_transition = enable;
+
+            // 设置配置
+            motor_controller->SetSmoothTransitionConfig(config);
+            ESP_LOGI(TAG, "平滑过渡配置设置成功");
+
+            return true;
+        });
+
+    // 等待电机过渡完成
+    mcp_server.AddTool(
+        "self.electron.wait_motor_transition", "等待电机过渡完成，motor: 电机(A/B/ALL), timeout_ms: 超时时间(毫秒)",
+        PropertyList({
+            Property("motor", kPropertyTypeString, "ALL"),
+            Property("timeout_ms", kPropertyTypeInteger, 5000, 1000, 30000)
+        }),
+        [this](const PropertyList &properties) -> ReturnValue {
+            std::string motor = properties["motor"].value<std::string>();
+            int timeout_ms = properties["timeout_ms"].value<int>();
+            
+            ESP_LOGI(TAG, "等待电机过渡完成: 电机=%s, 超时时间=%dms", motor.c_str(), timeout_ms);
+
+            // 获取L298N电机控制器实例
+            L298nMotorController* motor_controller = L298nMotorController::GetInstance();
+            if (motor_controller == nullptr) {
+                ESP_LOGE(TAG, "L298N电机控制器未初始化");
+                return false;
+            }
+
+            bool result = false;
+            if (motor == "A") {
+                result = motor_controller->WaitMotorATransition(timeout_ms);
+            } else if (motor == "B") {
+                result = motor_controller->WaitMotorBTransition(timeout_ms);
+            } else if (motor == "ALL") {
+                result = motor_controller->WaitAllMotorsTransition(timeout_ms);
+            } else {
+                ESP_LOGE(TAG, "无效的电机参数: %s", motor.c_str());
+                return false;
+            }
+
+            ESP_LOGI(TAG, "等待电机过渡完成: %s", result ? "成功" : "超时");
+            return result;
+        });
+
+    // 平滑过渡的电机控制（增强版）
+    mcp_server.AddTool(
+        "self.electron.motor_smooth_control", "平滑控制电机，motor: 电机(A/B/ALL), direction: 方向(0=正转,1=反转,2=停止), speed: 速度(0-100), wait_completion: 是否等待完成",
+        PropertyList({
+            Property("motor", kPropertyTypeString, "A"),
+            Property("direction", kPropertyTypeInteger, 2, 0, 2),
+            Property("speed", kPropertyTypeInteger, 0, 0, 100),
+            Property("wait_completion", kPropertyTypeBoolean, true)
+        }),
+        [this](const PropertyList &properties) -> ReturnValue {
+            std::string motor = properties["motor"].value<std::string>();
+            int direction = properties["direction"].value<int>();
+            int speed = properties["speed"].value<int>();
+            bool wait_completion = properties["wait_completion"].value<bool>();
+            
+            ESP_LOGI(TAG, "平滑控制电机: 电机=%s, 方向=%d, 速度=%d, 等待完成=%s",
+                     motor.c_str(), direction, speed, wait_completion ? "是" : "否");
+
+            // 获取L298N电机控制器实例
+            L298nMotorController* motor_controller = L298nMotorController::GetInstance();
+            if (motor_controller == nullptr) {
+                ESP_LOGE(TAG, "L298N电机控制器未初始化");
+                return false;
+            }
+
+            bool result = true;
+            if (motor == "A") {
+                motor_controller->SetMotorA(static_cast<MotorDirection>(direction), speed, true);
+                if (wait_completion) {
+                    result = motor_controller->WaitMotorATransition(5000);
+                }
+            } else if (motor == "B") {
+                motor_controller->SetMotorB(static_cast<MotorDirection>(direction), speed, true);
+                if (wait_completion) {
+                    result = motor_controller->WaitMotorBTransition(5000);
+                }
+            } else if (motor == "ALL") {
+                MotorControl motor_a(0, static_cast<MotorDirection>(direction), speed);
+                MotorControl motor_b(1, static_cast<MotorDirection>(direction), speed);
+                motor_controller->SetMotors(motor_a, motor_b, true);
+                if (wait_completion) {
+                    result = motor_controller->WaitAllMotorsTransition(5000);
+                }
+            } else {
+                ESP_LOGE(TAG, "无效的电机参数: %s", motor.c_str());
+                return false;
+            }
+
+            ESP_LOGI(TAG, "平滑控制电机完成: %s", result ? "成功" : "失败");
+            return result;
+        });
+
     ESP_LOGI(TAG, "Bot MCP工具注册完成");
 }
