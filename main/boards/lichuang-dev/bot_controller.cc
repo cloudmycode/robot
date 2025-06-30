@@ -46,7 +46,7 @@ void BotController::RegisterMcpTools() {
             ESP_LOGI(TAG, "舵机旋转 angle: %d", angle);
 
             // 使用单例模式的PCA9685控制舵机
-            Pca9685 *pca9685 = Pca9685::GetInstance();
+            Pca9685 *pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
             // 使用结构体方式，让两个舵机同时运动（自动计算大小）
             ServoControl servos[] = {
                 {0, angle},  // 通道0

@@ -88,12 +88,12 @@ class LichuangDevBoard : public WifiBoard {
         LichuangDevBoard* board = static_cast<LichuangDevBoard*>(arg);
         int idx = board->current_task_index_;
         // 更新当前任务索引
-        board->current_task_index_ = (board->current_task_index_ + 1) % 7;
+        board->current_task_index_ = (board->current_task_index_ + 1) % 10;
 
-        int angle = idx % 2 == 0 ? 180 : 0;
+        int angle = 10 * idx % 181;
 
         // 测试舵机控制
-        Pca9685* pca9685 = Pca9685::GetInstance();
+        Pca9685* pca9685 = Pca9685::GetInstance(GPIO_10_PCA9685);
         // 使用结构体方式，让两个舵机同时运动（自动计算大小）
         ServoControl servos[] = {
             {0, angle},  // 通道0
@@ -101,13 +101,13 @@ class LichuangDevBoard : public WifiBoard {
         };
 
         ESP_LOGI(TAG, "同时设置通道0和1舵机角度: %d°", angle);
-        pca9685->SetServoAngles(servos);  // 自动计算大小为2
-        // pca9685->SetServoAngle(0, angle);
+        // pca9685->SetServoAngles(servos);  // 自动计算大小为2
+        pca9685->SetServoAngle(0, angle);
 
         // 测试电机控制
-        L298nMotorController* motor_controller = L298nMotorController::GetInstance();
+        // L298nMotorController* motor_controller = L298nMotorController::GetInstance();
         // motor_controller->SetMotorB(idx % 2 == 0 ? MotorDirection::FORWARD : MotorDirection::BACKWARD, 15 * idx);
-        motor_controller->SetMotorB(MotorDirection::FORWARD, 16);
+        // motor_controller->SetMotorB(MotorDirection::FORWARD, 16);
     }
 
     // TODO 调试用 定时任务回调函数
@@ -140,10 +140,31 @@ class LichuangDevBoard : public WifiBoard {
         // Initialize PCA9557
         pca9557_ = new Pca9557(i2c_bus_, 0x19);
 
-        // Initialize PCA9685 (舵机控制器) - 使用单例模式
+        // Initialize I2C接口上的PCA9685 (舵机控制器) - 使用单例模式
         vTaskDelay(pdMS_TO_TICKS(100));
-        ESP_LOGI(TAG, "初始化PCA9685");
-        Pca9685::Initialize(i2c_bus_, 0x40);
+        ESP_LOGI(TAG, "初始化主I2C总线上的PCA9685");
+        Pca9685::Initialize(GPIO_I2C_PCA9685, i2c_bus_, 0x40);
+
+        // Initialize GPIO10接口上的PCA9685 (舵机控制器) - 使用单例模式
+        i2c_master_bus_config_t i2c_bus_cfg_gpio10 = {
+            .i2c_port = (i2c_port_t)0,  // 使用I2C_NUM_0，避免与主I2C总线冲突
+            .sda_io_num = GPIO_NUM_10,
+            .scl_io_num = GPIO_NUM_11,
+            .clk_source = I2C_CLK_SRC_DEFAULT,
+            .glitch_ignore_cnt = 7,
+            .intr_priority = 0,
+            .trans_queue_depth = 0,
+            .flags =
+                {
+                    .enable_internal_pullup = 1,
+                },
+        };
+        i2c_master_bus_handle_t i2c_bus_gpio10_;
+        ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg_gpio10, &i2c_bus_gpio10_));
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+        ESP_LOGI(TAG, "初始化GPIO10上的PCA9685");
+        Pca9685::Initialize(GPIO_10_PCA9685, i2c_bus_gpio10_, 0x40);
         
         // Initialize L298N电机控制器 - 使用单例模式
         vTaskDelay(pdMS_TO_TICKS(100));

@@ -23,7 +23,7 @@ L298nMotorController::L298nMotorController()
     ESP_LOGI(TAG, "L298N电机控制器初始化...");
     
     // 获取PCA9685实例
-    pca9685_ = Pca9685::GetInstance();
+    pca9685_ = Pca9685::GetInstance(GPIO_I2C_PCA9685);
     if (pca9685_ == nullptr) {
         ESP_LOGE(TAG, "PCA9685实例未初始化，请先初始化PCA9685");
         return;

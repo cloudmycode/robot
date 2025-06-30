@@ -6,11 +6,12 @@
 
 #include <cmath>
 #include <vector>
+#include <map>
 
 #define TAG "PCA9685"
 
 // 初始化静态成员变量
-Pca9685* Pca9685::instance_ = nullptr;
+std::map<uint8_t, Pca9685*> Pca9685::instances_;
 
 Pca9685::Pca9685(i2c_master_bus_handle_t i2c_bus, uint8_t addr)
     : I2cDevice(i2c_bus, addr), pwm_frequency_(DEFAULT_PWM_FREQ) {
@@ -28,26 +29,60 @@ Pca9685::Pca9685(i2c_master_bus_handle_t i2c_bus, uint8_t addr)
     Initialize();
 }
 
-Pca9685* Pca9685::GetInstance() {
-    if (instance_ == nullptr) {
-        ESP_LOGE(TAG, "PCA9685实例未初始化，请先调用Initialize()");
-        return nullptr;
+Pca9685* Pca9685::GetInstance(uint8_t id) {
+    auto it = instances_.find(id);
+    if (it != instances_.end()) {
+        return it->second;
     }
-    return instance_;
+    
+    ESP_LOGE(TAG, "PCA9685实例ID %d 不存在，请先调用Initialize()", id);
+    return nullptr;
 }
 
-void Pca9685::Initialize(i2c_master_bus_handle_t i2c_bus, uint8_t addr) {
-    if (instance_ != nullptr) {
-        ESP_LOGW(TAG, "PCA9685实例已存在，销毁旧实例");
-        delete instance_;
+void Pca9685::Initialize(uint8_t id, i2c_master_bus_handle_t i2c_bus, uint8_t addr) {
+    // 检查ID是否超出范围
+    if (id >= MAX_PCA9685_INSTANCES) {
+        ESP_LOGE(TAG, "PCA9685实例ID超出范围: %d (最大: %d)", id, MAX_PCA9685_INSTANCES - 1);
+        return;
     }
 
-    instance_ = new Pca9685(i2c_bus, addr);
-    if (instance_ != nullptr) {
-        ESP_LOGI(TAG, "PCA9685单例实例创建成功");
-    } else {
-        ESP_LOGE(TAG, "PCA9685单例实例创建失败");
+    // 如果实例已存在，先销毁
+    if (instances_.find(id) != instances_.end()) {
+        ESP_LOGW(TAG, "PCA9685实例ID %d 已存在，销毁旧实例", id);
+        delete instances_[id];
     }
+
+    // 创建新实例
+    instances_[id] = new Pca9685(i2c_bus, addr);
+    if (instances_[id] != nullptr) {
+        ESP_LOGI(TAG, "PCA9685实例ID %d 创建成功", id);
+    } else {
+        ESP_LOGE(TAG, "PCA9685实例ID %d 创建失败", id);
+        instances_.erase(id);
+    }
+}
+
+void Pca9685::Destroy(uint8_t id) {
+    auto it = instances_.find(id);
+    if (it != instances_.end()) {
+        ESP_LOGI(TAG, "销毁PCA9685实例ID %d", id);
+        delete it->second;
+        instances_.erase(it);
+    } else {
+        ESP_LOGW(TAG, "PCA9685实例ID %d 不存在，无需销毁", id);
+    }
+}
+
+void Pca9685::DestroyAll() {
+    ESP_LOGI(TAG, "销毁所有PCA9685实例，共 %zu 个", instances_.size());
+    for (auto& pair : instances_) {
+        delete pair.second;
+    }
+    instances_.clear();
+}
+
+bool Pca9685::IsInstanceExists(uint8_t id) {
+    return instances_.find(id) != instances_.end();
 }
 
 void Pca9685::Initialize() {

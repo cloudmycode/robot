@@ -2,9 +2,14 @@
 #define PCA9685_H
 
 #include <esp_log.h>
+#include <map>
 
 #include "i2c_device.h"
 
+// 宏定义PCA9685实例ID
+#define GPIO_10_PCA9685 0       // 使用GPIO10上的PCA9685
+#define GPIO_I2C_PCA9685 1      // 使用I2C总线上的PCA9685
+#define MAX_PCA9685_INSTANCES 2 // 最大实例数
 /**
  * @brief 舵机控制结构体
  */
@@ -19,38 +24,81 @@ struct ServoControl {
  * @brief PCA9685 PWM控制器类
  *
  * PCA9685是一个16通道12位PWM控制器，常用于控制舵机、LED等设备。
- * 该类实现了单例模式，确保全局只有一个PCA9685实例。
+ * 该类支持多实例管理，可以通过预定义的ID获取不同的PCA9685实例。
  */
 class Pca9685 : public I2cDevice {
    public:
     /**
-     * @brief 获取PCA9685单例实例
+     * @brief 获取指定ID的PCA9685实例
      *
-     * @return Pca9685* 返回PCA9685实例指针
+     * @param id PCA9685实例ID（使用宏定义，如GPIO_10_PCA9685）
+     * @return Pca9685* 返回PCA9685实例指针，如果不存在则返回nullptr
      *
      * 用法：
-     * Pca9685* pca = Pca9685::GetInstance();
+     * Pca9685* pca1 = Pca9685::GetInstance(GPIO_10_PCA9685);
+     * Pca9685* pca2 = Pca9685::GetInstance(GPIO_11_PCA9685);
      *
      * 注意：使用前必须先调用Initialize()方法进行初始化
      */
-    static Pca9685 *GetInstance();
+    static Pca9685* GetInstance(uint8_t id);
 
     /**
-     * @brief 初始化PCA9685设备
+     * @brief 初始化指定ID的PCA9685设备
      *
+     * @param id PCA9685实例ID（使用宏定义，如GPIO_10_PCA9685）
      * @param i2c_bus I2C总线句柄
      * @param addr PCA9685设备地址，默认为0x40
      *
      * 功能：
-     * - 创建PCA9685实例
+     * - 创建指定ID的PCA9685实例
      * - 配置I2C通信
      * - 设置PWM频率为25Hz（适合舵机控制）
      *
      * 用法：
-     * Pca9685::Initialize(i2c_bus_handle, 0x40);
+     * Pca9685::Initialize(GPIO_10_PCA9685, i2c_bus_handle, 0x40);
+     * Pca9685::Initialize(GPIO_11_PCA9685, i2c_bus_handle, 0x41);
      */
-    static void Initialize(i2c_master_bus_handle_t i2c_bus,
-                           uint8_t addr = 0x40);
+    static void Initialize(uint8_t id, i2c_master_bus_handle_t i2c_bus,
+                          uint8_t addr = 0x40);
+
+    /**
+     * @brief 销毁指定ID的PCA9685实例
+     *
+     * @param id PCA9685实例ID
+     *
+     * 功能：
+     * - 释放指定ID的PCA9685实例
+     * - 清理相关资源
+     *
+     * 用法：
+     * Pca9685::Destroy(GPIO_10_PCA9685);
+     */
+    static void Destroy(uint8_t id);
+
+    /**
+     * @brief 销毁所有PCA9685实例
+     *
+     * 功能：
+     * - 释放所有PCA9685实例
+     * - 清理所有相关资源
+     *
+     * 用法：
+     * Pca9685::DestroyAll();
+     */
+    static void DestroyAll();
+
+    /**
+     * @brief 检查指定ID的PCA9685实例是否存在
+     *
+     * @param id PCA9685实例ID
+     * @return true 实例存在，false 实例不存在
+     *
+     * 用法：
+     * if (Pca9685::IsInstanceExists(GPIO_10_PCA9685)) {
+     *     // 实例存在，可以安全使用
+     * }
+     */
+    static bool IsInstanceExists(uint8_t id);
 
     /**
      * @brief 设置舵机角度
@@ -140,8 +188,8 @@ class Pca9685 : public I2cDevice {
     Pca9685(const Pca9685 &) = delete;
     Pca9685 &operator=(const Pca9685 &) = delete;
 
-    // 静态实例指针
-    static Pca9685 *instance_;
+    // 静态实例映射表
+    static std::map<uint8_t, Pca9685*> instances_;
 
     // 寄存器地址常量
     static constexpr uint8_t MODE1 = 0x00;
