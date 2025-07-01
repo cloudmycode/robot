@@ -23,6 +23,7 @@
 #include "iot/thing_manager.h"
 #include "l298n_motor_controller.h"
 #include "pca9685.h"
+#include "rcwl1605.h"
 #include "wifi_board.h"
 
 #define TAG "LichuangDevBoard"
@@ -77,6 +78,7 @@ class LichuangDevBoard : public WifiBoard {
     LcdDisplay* display_;
     Pca9557* pca9557_;
     Esp32Camera* camera_;
+    Rcwl1605* ultrasonic_sensor_;  // RCWL-1605超声波传感器
 
     /** 调试 Start ***************************************************/
     // TODO 定时任务相关
@@ -90,24 +92,27 @@ class LichuangDevBoard : public WifiBoard {
         // 更新当前任务索引
         board->current_task_index_ = (board->current_task_index_ + 1) % 10;
 
-        int angle = 10 * idx % 181;
+        // int angle = 10 * idx % 181;
 
         // 测试舵机控制
-        Pca9685* pca9685 = Pca9685::GetInstance(GPIO_10_PCA9685);
-        // 使用结构体方式，让两个舵机同时运动（自动计算大小）
-        ServoControl servos[] = {
-            {0, angle},  // 通道0
-            {1, angle / 2}   // 通道1
-        };
+        // Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+        // // 使用结构体方式，让两个舵机同时运动（自动计算大小）
+        // ServoControl servos[] = {
+        //     {0, angle},  // 通道0
+        //     {1, angle / 2}   // 通道1
+        // };
 
-        ESP_LOGI(TAG, "同时设置通道0和1舵机角度: %d°", angle);
+        // ESP_LOGI(TAG, "同时设置通道0和1舵机角度: %d°", angle);
         // pca9685->SetServoAngles(servos);  // 自动计算大小为2
-        pca9685->SetServoAngle(0, angle);
+        // pca9685->SetServoAngle(0, angle);
 
         // 测试电机控制
         // L298nMotorController* motor_controller = L298nMotorController::GetInstance();
         // motor_controller->SetMotorB(idx % 2 == 0 ? MotorDirection::FORWARD : MotorDirection::BACKWARD, 15 * idx);
         // motor_controller->SetMotorB(MotorDirection::FORWARD, 16);
+        
+        // 测试超声波传感器
+        board->TestUltrasonicSensor();
     }
 
     // TODO 调试用 定时任务回调函数
@@ -116,7 +121,7 @@ class LichuangDevBoard : public WifiBoard {
             .callback = TaskTimerCallback, .arg = this, .name = "task_timer"};
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &task_timer_));
         ESP_ERROR_CHECK(esp_timer_start_periodic(
-            task_timer_, 10000000));  // 1秒 = 1,000,000微秒
+            task_timer_, 2000000));  // 1秒 = 1,000,000微秒
     }
     /** 调试 End ***************************************************/
 
@@ -145,27 +150,6 @@ class LichuangDevBoard : public WifiBoard {
         ESP_LOGI(TAG, "初始化主I2C总线上的PCA9685");
         Pca9685::Initialize(GPIO_I2C_PCA9685, i2c_bus_, 0x40);
 
-        // Initialize GPIO10接口上的PCA9685 (舵机控制器) - 使用单例模式
-        i2c_master_bus_config_t i2c_bus_cfg_gpio10 = {
-            .i2c_port = (i2c_port_t)0,  // 使用I2C_NUM_0，避免与主I2C总线冲突
-            .sda_io_num = GPIO_NUM_10,
-            .scl_io_num = GPIO_NUM_11,
-            .clk_source = I2C_CLK_SRC_DEFAULT,
-            .glitch_ignore_cnt = 7,
-            .intr_priority = 0,
-            .trans_queue_depth = 0,
-            .flags =
-                {
-                    .enable_internal_pullup = 1,
-                },
-        };
-        i2c_master_bus_handle_t i2c_bus_gpio10_;
-        ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg_gpio10, &i2c_bus_gpio10_));
-
-        vTaskDelay(pdMS_TO_TICKS(100));
-        ESP_LOGI(TAG, "初始化GPIO10上的PCA9685");
-        Pca9685::Initialize(GPIO_10_PCA9685, i2c_bus_gpio10_, 0x40);
-        
         // Initialize L298N电机控制器 - 使用单例模式
         vTaskDelay(pdMS_TO_TICKS(100));
         ESP_LOGI(TAG, "初始化L298N电机控制器");
@@ -327,6 +311,21 @@ class LichuangDevBoard : public WifiBoard {
         camera_ = new Esp32Camera(config);
     }
 
+    void InitializeUltrasonicSensor() {
+        // 初始化RCWL-1605超声波传感器
+        ESP_LOGI(TAG, "初始化RCWL-1605超声波传感器");
+        ultrasonic_sensor_ = new Rcwl1605(RCWL1605_TRIGGER_PIN, RCWL1605_ECHO_PIN);
+        
+        esp_err_t ret = ultrasonic_sensor_->Initialize();
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "RCWL-1605超声波传感器初始化成功");
+            // 设置超时时间为50ms
+            ultrasonic_sensor_->SetTimeout(50000);
+        } else {
+            ESP_LOGE(TAG, "RCWL-1605超声波传感器初始化失败: %s", esp_err_to_name(ret));
+        }
+    }
+
    public:
     LichuangDevBoard() : boot_button_(BOOT_BUTTON_GPIO) {
         InitializeI2c();
@@ -335,6 +334,7 @@ class LichuangDevBoard : public WifiBoard {
         InitializeTouch();
         InitializeButtons();
         InitializeCamera();
+        InitializeUltrasonicSensor();  // 初始化超声波传感器
         InitializeTaskTimer();  // TODO 调试用 定时任务
 
 #if CONFIG_IOT_PROTOCOL_XIAOZHI
@@ -372,6 +372,18 @@ class LichuangDevBoard : public WifiBoard {
     }
 
     virtual Camera* GetCamera() override { return camera_; }
+
+
+
+    // TODO 测试超声波传感器功能
+    void TestUltrasonicSensor() {
+        if (ultrasonic_sensor_ && ultrasonic_sensor_->IsValid()) {
+            ESP_LOGI(TAG, "开始测试RCWL-1605超声波传感器");
+
+            float distance = ultrasonic_sensor_->GetDistanceAccurate();
+            ESP_LOGI(TAG, "精确测量完成: 距离 = %.2f cm", distance);
+        }
+    }
 };
 
 DECLARE_BOARD(LichuangDevBoard);

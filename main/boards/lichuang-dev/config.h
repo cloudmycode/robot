@@ -58,5 +58,8 @@
 
 #define XCLK_FREQ_HZ 24000000
 
+/* RCWL-1605 超声波传感器引脚定义 */
+#define RCWL1605_TRIGGER_PIN GPIO_NUM_10  // 触发引脚
+#define RCWL1605_ECHO_PIN    GPIO_NUM_11  // 回波引脚
 
 #endif // _BOARD_CONFIG_H_
