@@ -107,10 +107,11 @@ class LichuangDevBoard : public WifiBoard {
         // pca9685->SetServoAngle(0, angle);
 
         // 测试电机控制
-        // L298nMotorController* motor_controller = L298nMotorController::GetInstance();
-        // motor_controller->SetMotorB(idx % 2 == 0 ? MotorDirection::FORWARD : MotorDirection::BACKWARD, 15 * idx);
-        // motor_controller->SetMotorB(MotorDirection::FORWARD, 16);
-        
+        // L298nMotorController* motor_controller =
+        // L298nMotorController::GetInstance(); motor_controller->SetMotorB(idx
+        // % 2 == 0 ? MotorDirection::FORWARD : MotorDirection::BACKWARD, 15 *
+        // idx); motor_controller->SetMotorB(MotorDirection::FORWARD, 16);
+
         // 测试超声波传感器
         board->TestUltrasonicSensor();
     }
@@ -121,7 +122,7 @@ class LichuangDevBoard : public WifiBoard {
             .callback = TaskTimerCallback, .arg = this, .name = "task_timer"};
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &task_timer_));
         ESP_ERROR_CHECK(esp_timer_start_periodic(
-            task_timer_, 2000000));  // 1秒 = 1,000,000微秒
+            task_timer_, 10000000));  // 1秒 = 1,000,000微秒
     }
     /** 调试 End ***************************************************/
 
@@ -314,15 +315,17 @@ class LichuangDevBoard : public WifiBoard {
     void InitializeUltrasonicSensor() {
         // 初始化RCWL-1605超声波传感器
         ESP_LOGI(TAG, "初始化RCWL-1605超声波传感器");
-        ultrasonic_sensor_ = new Rcwl1605(RCWL1605_TRIGGER_PIN, RCWL1605_ECHO_PIN);
-        
+        ultrasonic_sensor_ =
+            new Rcwl1605(RCWL1605_TRIGGER_PIN, RCWL1605_ECHO_PIN);
+
         esp_err_t ret = ultrasonic_sensor_->Initialize();
         if (ret == ESP_OK) {
             ESP_LOGI(TAG, "RCWL-1605超声波传感器初始化成功");
             // 设置超时时间为50ms
             ultrasonic_sensor_->SetTimeout(50000);
         } else {
-            ESP_LOGE(TAG, "RCWL-1605超声波传感器初始化失败: %s", esp_err_to_name(ret));
+            ESP_LOGE(TAG, "RCWL-1605超声波传感器初始化失败: %s",
+                     esp_err_to_name(ret));
         }
     }
 
@@ -335,7 +338,7 @@ class LichuangDevBoard : public WifiBoard {
         InitializeButtons();
         InitializeCamera();
         InitializeUltrasonicSensor();  // 初始化超声波传感器
-        InitializeTaskTimer();  // TODO 调试用 定时任务
+        InitializeTaskTimer();         // TODO 调试用 定时任务
 
 #if CONFIG_IOT_PROTOCOL_XIAOZHI
         auto& thing_manager = iot::ThingManager::GetInstance();
@@ -348,9 +351,10 @@ class LichuangDevBoard : public WifiBoard {
         // 初始化BotController
         ESP_LOGI(TAG, "BotController初始化");
         BotController::GetInstance();
-        
+
         // 验证L298N电机控制器初始化
-        L298nMotorController* motor_controller = L298nMotorController::GetInstance();
+        L298nMotorController* motor_controller =
+            L298nMotorController::GetInstance();
         if (motor_controller != nullptr) {
             ESP_LOGI(TAG, "L298N电机控制器初始化成功");
         } else {
@@ -373,13 +377,10 @@ class LichuangDevBoard : public WifiBoard {
 
     virtual Camera* GetCamera() override { return camera_; }
 
-
-
     // TODO 测试超声波传感器功能
     void TestUltrasonicSensor() {
         if (ultrasonic_sensor_ && ultrasonic_sensor_->IsValid()) {
-            ESP_LOGI(TAG, "开始测试RCWL-1605超声波传感器");
-
+            // 测试精确测量
             float distance = ultrasonic_sensor_->GetDistanceAccurate();
             ESP_LOGI(TAG, "精确测量完成: 距离 = %.2f cm", distance);
         }

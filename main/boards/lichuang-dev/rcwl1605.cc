@@ -125,13 +125,15 @@ float Rcwl1605::CalculateDistance(uint32_t echo_time_us) {
         return 0.0f;
     }
     
-    // 距离 = 时间 × 声速 / 2（来回距离）
-    float distance_cm = (echo_time_us * SOUND_SPEED_CM_PER_US) / 2.0f;
+    // 使用与厂家参考程序一致的计算公式
+    // distance = echo_time_us * 340 / 2 / 10000
+    // 其中：340 m/s 是声速，除以2是因为来回距离，除以10000是将微秒转换为厘米
+    float distance_cm = (echo_time_us * SOUND_SPEED_MPS) / (2.0f * 10000.0f);
     
-    // 检查距离是否在有效范围内
+    // 检查距离是否在有效范围内（包含盲区检查）
     if (distance_cm < MIN_VALID_DISTANCE || distance_cm > MAX_VALID_DISTANCE) {
         ESP_LOGW(TAG, "Distance %.2f cm is out of valid range [%.1f, %.1f] cm", 
-                 distance_cm, MIN_VALID_DISTANCE, MAX_VALID_DISTANCE);
+                     distance_cm, MIN_VALID_DISTANCE, MAX_VALID_DISTANCE);
         return 0.0f;  // 返回0表示无效测量
     }
     
@@ -201,9 +203,9 @@ float Rcwl1605::GetDistanceAccurate() {
             ESP_LOGW(TAG, "测量 %d: 无效", i + 1);
         }
         
-        // 测量间隔，避免回波干扰
+        // 测量间隔，符合厂家测量周期时间规格
         if (i < total_measurements - 1) {
-            vTaskDelay(pdMS_TO_TICKS(50));  // 50ms间隔
+            vTaskDelay(pdMS_TO_TICKS(MEASUREMENT_CYCLE_MS));
         }
     }
     
@@ -230,4 +232,4 @@ float Rcwl1605::GetDistanceAccurate() {
              accurate_distance, valid_count);
     
     return accurate_distance;
-} 
+}

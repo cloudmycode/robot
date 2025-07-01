@@ -51,12 +51,13 @@ private:
     bool is_initialized_;         // 初始化状态
     uint64_t last_measurement_time_; // 最后一次测量时间戳
     
-    // 常量定义
+    // 常量定义（根据厂家规格参数）
     static constexpr uint32_t DEFAULT_TIMEOUT_US = 30000;  // 默认超时30ms
     static constexpr uint32_t TRIGGER_PULSE_US = 10;       // 触发脉冲宽度10us
-    static constexpr float SOUND_SPEED_CM_PER_US = 0.0343; // 声速（厘米/微秒）
-    static constexpr float MIN_VALID_DISTANCE = 25.0f;     // 最小有效距离（厘米）
-    static constexpr float MAX_VALID_DISTANCE = 450.0f;    // 最大有效距离（厘米）
+    static constexpr float SOUND_SPEED_MPS = 342.62f;       // 声速（米/秒），与厂家参考程序一致
+    static constexpr float MIN_VALID_DISTANCE = 26.0f;     // 最小有效距离（厘米），大于盲区26cm
+    static constexpr float MAX_VALID_DISTANCE = 550.0f;    // 最大有效距离（厘米），厂家规格450-550cm
+    static constexpr uint32_t MEASUREMENT_CYCLE_MS = 50;   // 测量周期时间（毫秒），厂家规格
     
     static const char* TAG;
 };
