@@ -55,8 +55,8 @@ private:
     static constexpr uint32_t DEFAULT_TIMEOUT_US = 30000;  // 默认超时30ms
     static constexpr uint32_t TRIGGER_PULSE_US = 10;       // 触发脉冲宽度10us
     static constexpr float SOUND_SPEED_MPS = 342.62f;       // 声速（米/秒），与厂家参考程序一致
-    static constexpr float MIN_VALID_DISTANCE = 26.0f;     // 最小有效距离（厘米），大于盲区26cm
-    static constexpr float MAX_VALID_DISTANCE = 550.0f;    // 最大有效距离（厘米），厂家规格450-550cm
+    static constexpr float MIN_VALID_DISTANCE = 2.0f;     // 最小有效距离（厘米），大于盲区2cm
+    static constexpr float MAX_VALID_DISTANCE = 500.0f;    // 最大有效距离（厘米），厂家规格450-550cm
     static constexpr uint32_t MEASUREMENT_CYCLE_MS = 50;   // 测量周期时间（毫秒），厂家规格
     
     static const char* TAG;

@@ -26,6 +26,20 @@ Pca9685::Pca9685(i2c_master_bus_handle_t i2c_bus, uint8_t addr)
     }
 
     ESP_LOGI(TAG, "PCA9685设备检测成功");
+    
+    // 添加详细诊断信息
+    ESP_LOGI(TAG, "开始详细诊断PCA9685设备，地址: 0x%02X", addr);
+    
+    // 读取MODE1寄存器
+    uint8_t mode1 = ReadReg(MODE1);
+    ESP_LOGI(TAG, "初始MODE1寄存器值: 0x%02X", mode1);
+    
+    // 检查设备是否响应
+    if (mode1 == 0xFF || mode1 == 0x00) {
+        ESP_LOGE(TAG, "设备0x%02X无响应，MODE1=0x%02X", addr, mode1);
+        return;
+    }
+    
     Initialize();
 }
 
@@ -156,9 +170,10 @@ void Pca9685::SetServoAngle(uint8_t channel, int angle) {
     ESP_LOGD(TAG, "通道%d: 角度=%d°, 脉冲宽度=%dus, PWM周期=%fus, PWM单位=%d",
              channel, angle, pulse_us, pwm_period_us, pwm_units);
 
+    ESP_LOGI(TAG, "准备设置PWM: 通道%d, ON=0, OFF=%d", channel, pwm_units);
     SetPWM(channel, 0, pwm_units);
-    ESP_LOGI(TAG, "通道 %d 舵机角度设置为 %d° (脉冲宽度: %d us)", channel,
-             angle, pulse_us);
+    ESP_LOGI(TAG, "通道 %d 舵机角度设置为 %d° (脉冲宽度: %d us, PWM值: %d)", channel,
+             angle, pulse_us, pwm_units);
 }
 
 void Pca9685::SetServoAngles(const ServoControl* servos, size_t count) {
@@ -298,12 +313,12 @@ void Pca9685::SetPWM(uint8_t channel, uint16_t on, uint16_t off) {
         uint16_t actual_off = (off_high << 8) | off_low;
 
         if (actual_on == on && actual_off == off) {
-            ESP_LOGD(TAG, "通道%d PWM设置成功: ON=0x%04X, OFF=0x%04X", channel,
+            ESP_LOGI(TAG, "通道%d PWM设置成功: ON=0x%04X, OFF=0x%04X", channel,
                      on, off);
             return;
         } else {
-            ESP_LOGW(TAG, "通道%d PWM设置验证失败，重试 %d/%d", channel,
-                     retry_count + 1, max_retries);
+            ESP_LOGW(TAG, "通道%d PWM设置验证失败，期望: ON=0x%04X, OFF=0x%04X, 实际: ON=0x%04X, OFF=0x%04X, 重试 %d/%d", 
+                     channel, on, off, actual_on, actual_off, retry_count + 1, max_retries);
             retry_count++;
             vTaskDelay(pdMS_TO_TICKS(10));
         }

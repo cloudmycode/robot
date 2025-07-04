@@ -180,6 +180,8 @@ class Pca9685 : public I2cDevice {
      */
     void SetPWM(uint8_t channel, uint16_t on, uint16_t off);
 
+    bool IsDeviceReady();
+
    private:
     // 私有构造函数
     Pca9685(i2c_master_bus_handle_t i2c_bus, uint8_t addr);
@@ -220,7 +222,6 @@ class Pca9685 : public I2cDevice {
     // 内部方法
     void Initialize();
     void SetMultiplePWM(const uint8_t *channels, const uint16_t *off_values, size_t count);
-    bool IsDeviceReady();
 };
 
 #endif  // PCA9685_H

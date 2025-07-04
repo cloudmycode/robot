@@ -326,5 +326,199 @@ void BotController::RegisterMcpTools() {
             return result;
         });
 
+    // 舵机控制工具注册
+    ESP_LOGI(TAG, "开始注册舵机控制MCP工具...");
+
+    // 左臂抬起
+    mcp_server.AddTool(
+        "self.electron.left_arm_lift", "左臂抬起，angle: 角度值(0~180)",
+        PropertyList({Property("angle", kPropertyTypeInteger, 90, 0, 180)}),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int angle = properties["angle"].value<int>();
+            return SetLeftArmAngle(angle);
+        });
+
+    // 右臂抬起
+    mcp_server.AddTool(
+        "self.electron.right_arm_lift", "右臂抬起，angle: 角度值(0~180)",
+        PropertyList({Property("angle", kPropertyTypeInteger, 90, 0, 180)}),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int angle = properties["angle"].value<int>();
+            return SetRightArmAngle(angle);
+        });
+
+    // 左眉翘起
+    mcp_server.AddTool(
+        "self.electron.left_eyebrow_lift", "左眉翘起，angle: 角度值(0~180)",
+        PropertyList({Property("angle", kPropertyTypeInteger, 90, 0, 180)}),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int angle = properties["angle"].value<int>();
+            return SetLeftEyebrowAngle(angle);
+        });
+
+    // 右眉翘起
+    mcp_server.AddTool(
+        "self.electron.right_eyebrow_lift", "右眉翘起，angle: 角度值(0~180)",
+        PropertyList({Property("angle", kPropertyTypeInteger, 90, 0, 180)}),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int angle = properties["angle"].value<int>();
+            return SetRightEyebrowAngle(angle);
+        });
+
+    // 左眼角抬起
+    mcp_server.AddTool(
+        "self.electron.left_eye_lift", "左眼角抬起，angle: 角度值(0~180)",
+        PropertyList({Property("angle", kPropertyTypeInteger, 90, 0, 180)}),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int angle = properties["angle"].value<int>();
+            return SetLeftEyeAngle(angle);
+        });
+
+    // 右眼角抬起
+    mcp_server.AddTool(
+        "self.electron.right_eye_lift", "右眼角抬起，angle: 角度值(0~180)",
+        PropertyList({Property("angle", kPropertyTypeInteger, 90, 0, 180)}),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int angle = properties["angle"].value<int>();
+            return SetRightEyeAngle(angle);
+        });
+
+    // 左右转头 (0=左转, 90=向前, 180=右转)
+    mcp_server.AddTool(
+        "self.electron.head_turn", "左右转头，direction: 方向(0=左转, 90=向前, 180=右转)",
+        PropertyList({Property("direction", kPropertyTypeInteger, 90, 0, 180)}),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int direction = properties["direction"].value<int>();
+            return SetHeadTurnAngle(direction);
+        });
+
+    // 脖子大臂上下旋转
+    mcp_server.AddTool(
+        "self.electron.neck_upper_rotate", "脖子大臂上下旋转，angle: 角度值(0~180)",
+        PropertyList({Property("angle", kPropertyTypeInteger, 90, 0, 180)}),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int angle = properties["angle"].value<int>();
+            return SetNeckUpperAngle(angle);
+        });
+
+    // 脖子小臂上下旋转
+    mcp_server.AddTool(
+        "self.electron.neck_lower_rotate", "脖子小臂上下旋转，angle: 角度值(0~180)",
+        PropertyList({Property("angle", kPropertyTypeInteger, 90, 0, 180)}),
+        [this](const PropertyList &properties) -> ReturnValue {
+            int angle = properties["angle"].value<int>();
+            return SetNeckLowerAngle(angle);
+        });
+
+    ESP_LOGI(TAG, "舵机控制MCP工具注册完成");
     ESP_LOGI(TAG, "Bot MCP工具注册完成");
+}
+
+// 舵机控制私有方法实现
+bool BotController::SetLeftArmAngle(int angle) {
+    ESP_LOGI(TAG, "设置左臂舵机角度: %d°", angle);
+    Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+    if (pca9685 == nullptr) {
+        ESP_LOGE(TAG, "PCA9685控制器未初始化");
+        return false;
+    }
+    pca9685->SetServoAngle(SERVO_LEFT_ARM_ID, angle);
+    ESP_LOGI(TAG, "左臂舵机设置成功: %d°", angle);
+    return true;
+}
+
+bool BotController::SetRightArmAngle(int angle) {
+    ESP_LOGI(TAG, "设置右臂舵机角度: %d°", angle);
+    Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+    if (pca9685 == nullptr) {
+        ESP_LOGE(TAG, "PCA9685控制器未初始化");
+        return false;
+    }
+    pca9685->SetServoAngle(SERVO_RIGHT_ARM_ID, angle);
+    ESP_LOGI(TAG, "右臂舵机设置成功: %d°", angle);
+    return true;
+}
+
+bool BotController::SetLeftEyebrowAngle(int angle) {
+    ESP_LOGI(TAG, "设置左眉舵机角度: %d°", angle);
+    Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+    if (pca9685 == nullptr) {
+        ESP_LOGE(TAG, "PCA9685控制器未初始化");
+        return false;
+    }
+    pca9685->SetServoAngle(SERVO_LEFT_EYEBROW_ID, angle);
+    ESP_LOGI(TAG, "左眉舵机设置成功: %d°", angle);
+    return true;
+}
+
+bool BotController::SetRightEyebrowAngle(int angle) {
+    ESP_LOGI(TAG, "设置右眉舵机角度: %d°", angle);
+    Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+    if (pca9685 == nullptr) {
+        ESP_LOGE(TAG, "PCA9685控制器未初始化");
+        return false;
+    }
+    pca9685->SetServoAngle(SERVO_RIGHT_EYEBROW_ID, angle);
+    ESP_LOGI(TAG, "右眉舵机设置成功: %d°", angle);
+    return true;
+}
+
+bool BotController::SetLeftEyeAngle(int angle) {
+    ESP_LOGI(TAG, "设置左眼角舵机角度: %d°", angle);
+    Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+    if (pca9685 == nullptr) {
+        ESP_LOGE(TAG, "PCA9685控制器未初始化");
+        return false;
+    }
+    pca9685->SetServoAngle(SERVO_LEFT_EYE_ID, angle);
+    ESP_LOGI(TAG, "左眼角舵机设置成功: %d°", angle);
+    return true;
+}
+
+bool BotController::SetRightEyeAngle(int angle) {
+    ESP_LOGI(TAG, "设置右眼角舵机角度: %d°", angle);
+    Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+    if (pca9685 == nullptr) {
+        ESP_LOGE(TAG, "PCA9685控制器未初始化");
+        return false;
+    }
+    pca9685->SetServoAngle(SERVO_RIGHT_EYE_ID, angle);
+    ESP_LOGI(TAG, "右眼角舵机设置成功: %d°", angle);
+    return true;
+}
+
+bool BotController::SetHeadTurnAngle(int angle) {
+    ESP_LOGI(TAG, "设置头部转动舵机角度: %d°", angle);
+    Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+    if (pca9685 == nullptr) {
+        ESP_LOGE(TAG, "PCA9685控制器未初始化");
+        return false;
+    }
+    pca9685->SetServoAngle(SERVO_HEAD_TURN_ID, angle);
+    ESP_LOGI(TAG, "头部转动舵机设置成功: %d°", angle);
+    return true;
+}
+
+bool BotController::SetNeckUpperAngle(int angle) {
+    ESP_LOGI(TAG, "设置脖子大臂舵机角度: %d°", angle);
+    Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+    if (pca9685 == nullptr) {
+        ESP_LOGE(TAG, "PCA9685控制器未初始化");
+        return false;
+    }
+    pca9685->SetServoAngle(SERVO_NECK_UPPER_ID, angle);
+    ESP_LOGI(TAG, "脖子大臂舵机设置成功: %d°", angle);
+    return true;
+}
+
+bool BotController::SetNeckLowerAngle(int angle) {
+    ESP_LOGI(TAG, "设置脖子小臂舵机角度: %d°", angle);
+    Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+    if (pca9685 == nullptr) {
+        ESP_LOGE(TAG, "PCA9685控制器未初始化");
+        return false;
+    }
+    pca9685->SetServoAngle(SERVO_NECK_LOWER_ID, angle);
+    ESP_LOGI(TAG, "脖子小臂舵机设置成功: %d°", angle);
+    return true;
 }

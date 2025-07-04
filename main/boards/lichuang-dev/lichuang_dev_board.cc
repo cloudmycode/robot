@@ -92,10 +92,13 @@ class LichuangDevBoard : public WifiBoard {
         // 更新当前任务索引
         board->current_task_index_ = (board->current_task_index_ + 1) % 10;
 
-        // int angle = 10 * idx % 181;
+        int angle = 10 * idx % 181;
+
+        board->ScanI2cDevices();
 
         // 测试舵机控制
-        // Pca9685* pca9685 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+        Pca9685* pca9685_i2c = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+        Pca9685* pca9685_10 = Pca9685::GetInstance(GPIO_10_PCA9685);
         // // 使用结构体方式，让两个舵机同时运动（自动计算大小）
         // ServoControl servos[] = {
         //     {0, angle},  // 通道0
@@ -104,7 +107,8 @@ class LichuangDevBoard : public WifiBoard {
 
         // ESP_LOGI(TAG, "同时设置通道0和1舵机角度: %d°", angle);
         // pca9685->SetServoAngles(servos);  // 自动计算大小为2
-        // pca9685->SetServoAngle(0, angle);
+        pca9685_i2c->SetServoAngle(0, angle);
+        pca9685_10->SetServoAngle(0, angle);
 
         // 测试电机控制
         // L298nMotorController* motor_controller =
@@ -113,7 +117,7 @@ class LichuangDevBoard : public WifiBoard {
         // idx); motor_controller->SetMotorB(MotorDirection::FORWARD, 16);
 
         // 测试超声波传感器
-        board->TestUltrasonicSensor();
+        // board->TestUltrasonicSensor();
     }
 
     // TODO 调试用 定时任务回调函数
@@ -122,7 +126,7 @@ class LichuangDevBoard : public WifiBoard {
             .callback = TaskTimerCallback, .arg = this, .name = "task_timer"};
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &task_timer_));
         ESP_ERROR_CHECK(esp_timer_start_periodic(
-            task_timer_, 10000000));  // 1秒 = 1,000,000微秒
+            task_timer_, 2000000));  // 1秒 = 1,000,000微秒
     }
     /** 调试 End ***************************************************/
 
@@ -149,7 +153,14 @@ class LichuangDevBoard : public WifiBoard {
         // Initialize I2C接口上的PCA9685 (舵机控制器) - 使用单例模式
         vTaskDelay(pdMS_TO_TICKS(100));
         ESP_LOGI(TAG, "初始化主I2C总线上的PCA9685");
-        Pca9685::Initialize(GPIO_I2C_PCA9685, i2c_bus_, 0x40);
+        
+        // 初始化PCA9685设备 - 先初始化0x40，再初始化0x41
+        ESP_LOGI(TAG, "先初始化0x40地址PCA9685");
+        Pca9685::Initialize(GPIO_10_PCA9685, i2c_bus_, 0x40);
+        vTaskDelay(pdMS_TO_TICKS(200));  // 增加延迟
+        
+        ESP_LOGI(TAG, "再初始化0x41地址PCA9685");
+        Pca9685::Initialize(GPIO_I2C_PCA9685, i2c_bus_, 0x43);
 
         // Initialize L298N电机控制器 - 使用单例模式
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -339,6 +350,12 @@ class LichuangDevBoard : public WifiBoard {
         InitializeCamera();
         InitializeUltrasonicSensor();  // 初始化超声波传感器
         InitializeTaskTimer();         // TODO 调试用 定时任务
+        
+        // 扫描I2C设备
+        ScanI2cDevices();
+        
+        // 测试0x41地址PCA9685功能
+        TestPca9685_0x41();
 
 #if CONFIG_IOT_PROTOCOL_XIAOZHI
         auto& thing_manager = iot::ThingManager::GetInstance();
@@ -384,6 +401,68 @@ class LichuangDevBoard : public WifiBoard {
             float distance = ultrasonic_sensor_->GetDistanceAccurate();
             ESP_LOGI(TAG, "精确测量完成: 距离 = %.2f cm", distance);
         }
+    }
+
+    // TODO debug 探测I2C设备地址
+    void ScanI2cDevices() {
+        ESP_LOGI(TAG, "开始扫描I2C设备...");
+        ESP_LOGI(TAG, "     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f");
+        
+        for (int i = 0; i < 128; i += 16) {
+            printf("%02x: ", i);
+            for (int j = 0; j < 16; j++) {
+                fflush(stdout);
+                uint8_t address = i + j;
+                
+                esp_err_t ret = i2c_master_probe(i2c_bus_, address, pdMS_TO_TICKS(200));
+                if (ret == ESP_OK) {
+                    printf("%02x ", address);
+                    ESP_LOGI(TAG, "发现I2C设备，地址: 0x%02x", address);
+                } else if (ret == ESP_ERR_TIMEOUT) {
+                    printf("UU ");
+                } else {
+                    printf("-- ");
+                }
+            }
+            printf("\n");
+        }
+        ESP_LOGI(TAG, "I2C设备扫描完成");
+    }
+    
+    // 测试0x41地址PCA9685功能
+    void TestPca9685_0x41() {
+        ESP_LOGI(TAG, "开始测试0x41地址PCA9685功能...");
+        
+        // 获取0x41地址的PCA9685实例
+        Pca9685* pca9685_0x41 = Pca9685::GetInstance(GPIO_I2C_PCA9685);
+        if (pca9685_0x41 == nullptr) {
+            ESP_LOGE(TAG, "0x41地址PCA9685实例获取失败");
+            return;
+        }
+        
+        ESP_LOGI(TAG, "0x41地址PCA9685实例获取成功");
+        
+        // 测试设备状态
+        if (!pca9685_0x41->IsDeviceReady()) {
+            ESP_LOGE(TAG, "0x41地址PCA9685设备状态异常");
+            return;
+        }
+        
+        ESP_LOGI(TAG, "0x41地址PCA9685设备状态正常");
+        
+        // 测试PWM输出
+        ESP_LOGI(TAG, "测试通道10-15的PWM输出...");
+        for (int channel = 10; channel <= 15; channel++) {
+            ESP_LOGI(TAG, "设置通道%d为50%%占空比", channel);
+            pca9685_0x41->SetPWM(channel, 0, 2048);  // 50%占空比
+            vTaskDelay(pdMS_TO_TICKS(500));
+            
+            ESP_LOGI(TAG, "关闭通道%d", channel);
+            pca9685_0x41->SetPWM(channel, 0, 0);     // 关闭
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+        
+        ESP_LOGI(TAG, "0x41地址PCA9685功能测试完成");
     }
 };
 
