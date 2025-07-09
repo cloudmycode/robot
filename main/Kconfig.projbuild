@@ -274,6 +274,9 @@ choice BOARD_TYPE
         select LV_GIF_CACHE_DECODE_DATA
     config BOARD_TYPE_JIUCHUAN
         bool "九川智能"
+    config BOARD_TYPE_ROBOT
+        bool "Robot开发板"
+        depends on IDF_TARGET_ESP32S3
 endchoice
 
 choice ESP_S3_LCD_EV_Board_Version_TYPE
@@ -289,7 +292,7 @@ choice ESP_S3_LCD_EV_Board_Version_TYPE
 endchoice
 
 choice DISPLAY_OLED_TYPE
-    depends on BOARD_TYPE_BREAD_COMPACT_WIFI || BOARD_TYPE_BREAD_COMPACT_ML307 || BOARD_TYPE_BREAD_COMPACT_ESP32
+    depends on BOARD_TYPE_BREAD_COMPACT_WIFI || BOARD_TYPE_BREAD_COMPACT_ML307 || BOARD_TYPE_BREAD_COMPACT_ESP32 || BOARD_TYPE_ROBOT
     prompt "OLED Type"
     default OLED_SSD1306_128X32
     help
@@ -426,5 +429,28 @@ choice IOT_PROTOCOL
     config IOT_PROTOCOL_XIAOZHI
         bool "Xiaozhi IoT 1.0 (Deprecated)"
 endchoice
+
+config USB_STREAM_ENABLED
+    bool "Enable USB Stream Support"
+    default n
+    depends on USB_OTG_SUPPORTED
+    help
+        启用USB音频流支持
+
+config USB_STREAM_SAMPLE_RATE
+    int "USB Stream Sample Rate"
+    default 16000
+    depends on USB_STREAM_ENABLED
+    range 8000 48000
+    help
+        USB音频流的采样率
+
+config USB_STREAM_CHANNELS
+    int "USB Stream Channels"
+    default 1
+    depends on USB_STREAM_ENABLED
+    range 1 2
+    help
+        USB音频流的声道数
 
 endmenu
