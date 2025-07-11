@@ -34,6 +34,14 @@ dependencies:
   espressif/esp_mmap_assets: '>=1.2'
   txp666/otto-emoji-gif-component: ~1.0.2
 
+  #robot board
+  espressif/esp32_s3_usb_otg:
+    rules:
+    - if: target in [esp32s3]
+    version: ^2.0.0
+  usb_stream:
+    version: '>=1.0.5'
+
   # SenseCAP Watcher Board
   wvirgil123/esp_jpeg_simd:
     version: 1.0.0
